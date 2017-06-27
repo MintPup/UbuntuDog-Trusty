@@ -9,4 +9,4 @@ All fixes for previous iso version moved [here.](https://github.com/DebianDog/Mi
 sudo apt-get -t trusty install firefox
 ```
 
-**3.** [Experimental save on exit in directory for casper-boot.](https://github.com/MintPup/MintPup-Trusty/blob/master/Extra-options.md)
+**3.** [Experimental save on exit in directory for casper-boot.](https://github.com/DebianDog/MintPup-Trusty/blob/master/Extra-options.md)
