@@ -1,0 +1,26 @@
+iso images:
+
+28f5e3a29529b8895a56c1705d5e2da4  MintPup-jwm-icewm-hybrid-26.07.2015.iso
+
+77e41836d8e6f94096b20ddc5ef792b1  MintPup-jwm-icewm-hybrid-07.05.2016.iso
+
+
+Extra modules:
+
+1f822c2b7d3d7b4ad0f7dcd6b7483a75  99-new-save-setup-mintpup.squashfs
+
+abdcc2023c938899137f4d1a3f2ffd66  02-linux-firmware_1.127.14_all-xz.squashfs
+
+dccc150f4bce3b55506982891c99645c  02-locale-mintpup-jwm-icewm-xz.squashfs
+
+9bb1d8ca220107d773193296038b2e08  06-DEVX-Python-add-PPA-repo.squashfs
+
+740794b1b7248379c9df4afc5f87913d  07-mintpup-vbox-light.squashfs
+
+d8c7a05b21379f6339b6ec3526a0cf47  09-mintpup-repo-2016.05.07.squashfs
+
+091b9f5b3fc777f8678e7a5dc9fa6a6b  091-man-doc-info-mintpup-jwm.squashfs
+
+1f822c2b7d3d7b4ad0f7dcd6b7483a75  99-new-save-setup-mintpup.squashfs
+
+98815960921debf5ffecaeb6718fdf7d  linux-firmware_1.127.14_all.deb
