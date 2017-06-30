@@ -1,5 +1,15 @@
 #!/bin/bash
 
+# From fredx181 for DebianDog.
+# 20170630 saintless: HOSTDIR= changed and disable multiple selection because of same bug after selecting all files:
+#          https://github.com/DebianDog/Squeeze/commit/94fc4686a289add32bf541e7cd7962cd82af30ec
+#          License GPLv3 according to:
+#          https://github.com/DebianDog/Wheezy/blob/master/Scripts-License.md
+#          https://github.com/DebianDog/Wheezy/blob/master/Credits.md
+#          Script source is included in /opt/bin inside MintPup-jwm-icewm-hybrid-07.05.2016.iso
+#          https://github.com/DebianDog/MintPup-Trusty/blob/5434e84250d51058c605cc3565dc877683bdf32e/scripts/sfs-get-mint
+
+
 if [ -z `which gsu` ]; then
 [ "`whoami`" != "root" ] && exec gksu ${0} "$@"
 else
@@ -8,7 +18,7 @@ fi
 
 # Variables for host directory and contents file:
 #HOSTDIR="http://kazzascorner.com.au/saintless/MintPup/Extra-modules"
-HOSTDIR="https://github.com/MintPup/MintPup-Trusty/releases/download/v0.1/"
+HOSTDIR="https://github.com/DebianDog/MintPup-Trusty/releases/download/v.1.1/"
 CONTENTFILE="sfs.txt"
 
 # Set GUI variables up
@@ -25,7 +35,7 @@ IMAGE="browser-dload"                    # window image (appears in dialog)
 cd /tmp
 wget --no-check-certificate "$HOSTDIR"/$CONTENTFILE -O $CONTENTFILE #github mod.
 ALL=`cat /tmp/$CONTENTFILE`
-LIST=$(yad --separator=" " --image="application-x-squashfs" --image-on-top --center --height 500 --width="500" --list --title="Download SFS module" --multiple --text=" Download SFS modules (.squashfs or .sfs). \n Select (multiple) items to download." --column " Available Modules" $ALL --button="gtk-cancel:1" --button="gtk-ok:0")
+LIST=$(yad --separator=" " --image="application-x-squashfs" --image-on-top --center --height 500 --width="500" --list --title="Download SFS module" --text=" Download SFS modules (.squashfs or .sfs). \n Select only one item to download." --column " Available Modules" $ALL --button="gtk-cancel:1" --button="gtk-ok:0")
 ret=$?
 [[ $ret -ne 0 ]] && exit 1
 echo $LIST
@@ -44,11 +54,11 @@ fi
 URILIST="`echo "$LIST" | sed "s,^,$HOSTDIR/," | tr '\n' ' '`"
 
 # Select folder to download to:
-SAVEFOLDER=$(yad  --center --image="application-x-squashfs" --image-on-top --title="Select folder to download SFS modules" --file --filename /media/ --directory --height=600 --width=800 --text=" Select folder to download SFS modules to" )
+SAVEFOLDER=$(yad  --center --image="application-x-squashfs" --image-on-top --title="Select folder to download SFS modules" --file --filename /media/ --directory --height=600 --width=800 --text=" Select/mark folder with single click to download SFS modules to" )
 ret=$?
 [[ $ret -ne 0 ]] && exit 1
 
-MAXDLS="5" # set maximum number of simultaneous downloads
+MAXDLS="1" # set maximum number of simultaneous downloads
 
 # download file and extract progress, speed and ETA from wget
 # we use sed regex for this
