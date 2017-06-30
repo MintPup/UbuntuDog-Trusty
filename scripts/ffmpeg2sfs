@@ -1,6 +1,13 @@
 #!/bin/bash
 
 # april 12 2015, Fred: added /tmp and / to the choice of where to create working dir and module.
+# 20170630 saintless - small change in link to ibavcodec.so version number.
+#          License GPLv3 according to:
+#          https://github.com/DebianDog/Wheezy/blob/master/Scripts-License.md
+#          https://github.com/DebianDog/Wheezy/blob/master/Credits.md
+#          Script source is included in /opt/bin inside MintPup-jwm-icewm-hybrid-07.05.2016.iso
+#          https://github.com/DebianDog/MintPup-Trusty/blob/5e47294e722c70652e2bc31f714c2d9c3253da68/scripts/ffmpeg2sfs
+
 
 if [ -z `which gsu` ]; then
 [ "`whoami`" != "root" ] && exec gksu ${0} "$@"
@@ -397,7 +404,7 @@ rm -fr "$WORK"/usr/share/doc
 rm -fr "$WORK"/usr/share/man
 rm -fr "$WORK"/usr/lib/i386-linux-gnu/i686/cmov/libavcodec.so.54.*
 rm -fr "$WORK"/usr/lib/i386-linux-gnu/i686/cmov/libavformat.so.54.*
-ln -s /usr/lib/i386-linux-gnu/libavcodec.so.54.35.0 "$WORK"/usr/lib/i386-linux-gnu/i686/cmov/libavcodec.so.54.35.0
+ln -s /usr/lib/i386-linux-gnu/libavcodec.so.54.35.1 "$WORK"/usr/lib/i386-linux-gnu/i686/cmov/libavcodec.so.54.35.1
 ln -s /usr/lib/i386-linux-gnu/libavformat.so.54.20.4 "$WORK"/usr/lib/i386-linux-gnu/i686/cmov/libavformat.so.54.20.4
 
 #cd "/mnt/$DRV"
