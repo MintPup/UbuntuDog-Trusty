@@ -1,0 +1,418 @@
+#!/bin/bash
+
+# april 12 2015, Fred: added /tmp and / to the choice of where to create working dir and module.
+
+if [ -z `which gsu` ]; then
+[ "`whoami`" != "root" ] && exec gksu ${0} "$@"
+else
+[ "`whoami`" != "root" ] && exec gsu ${0} "$@"
+fi
+
+# Function restore: Restore changes made in save directory after the installing:
+
+restore() {
+
+# Restore all dpkg stuff in /var/lib/dpkg/ back to how it was before running ffmpeg2sfs.
+[ -d "$CHNGS"/var/lib/dpkg/infoold ] && rm -fr "$CHNGS"/var/lib/dpkg/info && mv -f "$CHNGS"/var/lib/dpkg/infoold "$CHNGS"/var/lib/dpkg/info
+[ -d "$CHNGSEXIT" ] && [ -d "$CHNGSEXIT"/var/lib/dpkg/infoold ] && rm -fr "$CHNGSEXIT"/var/lib/dpkg/info && mv -f "$CHNGSEXIT"/var/lib/dpkg/infoold "$CHNGSEXIT"/var/lib/dpkg/info
+mv -f /var/lib/dpkg/statusold /var/lib/dpkg/status 2> /dev/null
+mv -f /var/lib/dpkg/availableold /var/lib/dpkg/available 2> /dev/null
+
+echo "*** dpkg important files are restored to previous state now ***"
+
+# Unmount all earlier mounted modules (live-boot only).
+if [ ! -f /mnt/live/tmp/modules ]; then
+    if grep -q /lib/live/mount /proc/mounts; then # live-boot v3
+cat /tmp/mnts |  while read mnt; do
+umount $mnt
+rmdir $mnt
+done
+    else # live-boot v2 (only when 'showmounts' parameter is not used)
+        if grep -qv showmounts /proc/cmdline; then
+        cat /tmp/mnts |  while read mnt; do
+        umount $mnt
+        rmdir $mnt
+        done
+        fi
+    fi
+fi
+}
+
+# Function: 'exitfn': 
+# In case the user interrupts the script, restore to as it was before.
+# Otherwise dpkg could be left in a broken state.
+
+exitfn () {
+    trap SIGINT              # Resore signal handling for SIGINT	
+if [ "$restore_done" = "" ]; then
+    
+    echo; echo 'Aarghh!! Interrupted! Will try to restore now.'
+   
+kill $pdapt 2> /dev/null
+sleep 3
+kill $pdyad 2> /dev/null
+kill $! 2> /dev/null
+
+yad --on-top --title="ffmpeg2sfs" --text=" <span size='large' background='dark red' foreground='yellow'><b> *** Aarghh!!  Interrupted!</b></span><span background='dark red' foreground='white'><b>    Will try to restore now... </b></span><span size='large' background='dark red' foreground='yellow'><b> *** </b></span>  " --center --undecorated --no-buttons &
+pd=$!
+yad --on-top --geometry=60+40+40 --title="ffmpeg2sfs" --text="  <span size='large' background='dark green' foreground='white'><b> *** Restoring... *** </b></span>  " --undecorated --no-buttons &
+pdd=$! 
+restore
+sleep 3
+kill $pdd 2> /dev/null
+sleep 2
+kill $pd 2> /dev/null
+yad --on-top --title="ffmpeg2sfs" --text="  <span size='large' background='dark green' foreground='white'><b> *** Restoring Done! *** </b></span>  " --center --undecorated --no-buttons --timeout 5
+fi
+
+if [ "$wrkdir_created" = "yes" ]; then
+kill $! 2> /dev/null
+  if [ -d "$WORK" ]; then
+yad --title="ffmpeg2sfs" --center --text=" Do you want to remove '$WORK'? \n Recommended to press 'Yes', as the process was interrupted. " --button="gtk-yes:0" --button="gtk-no:1"
+ret=$?
+	if [[ $ret -eq 0 ]]; then
+    		if [ -d "$WORK" ]; then
+    		rm -rf "$WORK"
+    		fi
+	fi
+  fi
+  if [ -f "$SQFS" ]; then
+yad --title="ffmpeg2sfs" --center --text=" Do you want to remove '$SQFS'? \n Recommended to press 'Yes', as the process was interrupted. " --button="gtk-yes:0" --button="gtk-no:1"
+ret=$?
+[[ $ret -ne 0 ]] && exit 0
+rm -f "$SQFS"
+  fi
+fi
+    exit                     #   then exit script.
+
+kill $! 2> /dev/null
+exit
+
+}
+
+trap "exitfn" 1 2 15           # Set up SIGINT trap to call function 'exitfn'.
+
+# Message at start.
+   if [ ! -f $HOME/.config/ffmpeg2sfsnomsg ]; then
+MESSAGE=`yad  --center --title="ffmpeg2sfs"  --text=" Creating module with this script will 'act' like there is nothing installed in the save file/folder.  \n \n This way the module has all required dependencies included. \n \n There's no need to run it with a clean savefile (in contrary with older ffmpeg2sfs) . " --image="dialog-information" --window-icon="dialog-information" \
+--form \
+--field=" Don't show this message again:CHK" "FALSE"`
+ret=$?
+[[ $ret -ne 0 ]] && exit 1
+ 
+NOMESSAGE="`echo $MESSAGE | cut -d "|" -f 1`"
+[ "$NOMESSAGE" = "TRUE" ] && touch $HOME/.config/ffmpeg2sfsnomsg
+   fi
+
+# Remove temp files possibly leftover from previous run.
+rm -f /tmp/mnts
+
+# Gui at start.
+LFONT="<span size='large' foreground='dark blue'><b>          *** Make libav-tools sfs module ***</b></span>"
+devs="$(blkid -o list | grep /dev | grep -E -v "swap|ntfs|vfat" | sort | cut -d" " -f1 | grep -E -v "/loop|sr0|swap" | sed 's|/dev/||g')"
+echo $devs
+DEVS=`echo $devs | sed 's/ /!/g'`
+SETUP=`yad  --center --title="ffmpeg2sfs"  --text="  $LFONT \n Create libav-tools module from downloaded packages by apt-get. \n <b>Note: This module will not be registered by dpkg. </b> \n After creating the module load libav-tools.sfs \n Type avconv in terminal to see avconv help menu. \n To start fresh, 'apt-get clean' will run before downloading. \n<span foreground='dark red'><b> This will remove all deb packages in /var/cache/apt/archives. </b></span>" \
+--field="*** Click for more information about ffmpeg2sfs. ***:BTN" "sh -c 'echo -e "'" Running ffmpeg2sfs script will create libav-tools.sfs separate module from downloaded with apt-get packages. You can simply install libav-tools with apt-get or Synaptic but the size will be 29 Mb uncompressed data in your save file. ffmpeg2sfs will create 6,5 Mb sfs module for the user who like to keep the system size small and load libav-tools.sfs only when it is needed. We can not provide ready for use libav-tools.sfs because it will contain modified version of non-free dependencies packages. Distribution of ready for use libav-tools.sfs will be violation of the license. 
+
+Anyway with this simple script you can make your own libav-tools.sfs module in only few minutes on DebianDog by single click starting ffmpeg2sfs script and confirmation click on OK button. Read the information on the GUI window before confirming OK button. 
+
+After creating libav-tools.sfs load it with right click sfs load option or with SFS-Loader. Type in terminal avconv for available options. Or avplay /path/to/video-file to play video. 
+ "'" | yad --title="'"Info dpkg registration"'" --height=300 --width=650 --text-info --wrap --button="'"gtk-close:0"'"'" \
+--window-icon="preferences-system" --form  \
+--window-icon="preferences-system" --form --columns=1 \
+--field="   Choose where to create libav-tools.sfs module, must be on linux filesystem. NTFS or FAT filesytems are excluded.  :LBL"  "" \
+--field=" :CB" "$DEVS!/tmp!/" \
+--field="   libav-tools is already set for download. Click OK button to start: :LBL" "" \
+--field=" : " "libav-tools" \
+--field=" Run 'apt-get update' first (recommended):CHK" "TRUE" \
+--button="gtk-quit:1" --button="gtk-ok:0"`
+ret=$?
+[[ $ret -ne 0 ]] && exit
+
+yad --on-top --title="ffmpeg2sfs" --text="  <span size='large' background='dark green' foreground='white'><b> *** Checking network connection... *** </b></span>  " --center --undecorated --no-buttons &
+pd=$!
+if ping -c1 google.com 2>&1 | grep unknown; then
+sleep 3
+kill $pd 2> /dev/null 
+yad --text="  There is no network connection. " --title="ffmpeg2sfs" --button="gtk-close:0"
+exit 0
+fi
+sleep 3
+kill $pd 2> /dev/null
+
+
+DRV="`echo $SETUP | cut -d "|" -f 3`"
+INSTALL="`echo $SETUP | cut -d "|" -f 5`"
+UPDATE="`echo $SETUP | cut -d "|" -f 6`"
+
+if [ -z "$DRV" ] || [ -z "$INSTALL" ]; then
+yad --center --title="ffmpeg2sfs" --text=" You probably did not fill in all fields, \n Please run again." --button="gtk-close:0"
+exit 0
+fi
+
+if [ "$UPDATE" = "TRUE" ]; then
+yad --on-top --title="ffmpeg2sfs" --text="  <span size='large' background='dark green' foreground='white'><b> *** Updating the repositories... *** </b></span>  " --center --undecorated --no-buttons &
+pd=$!
+apt-get update
+ret=$?
+kill $pd
+if [[ $ret -eq 100 ]]; then
+yad --title ffmpeg2sfs --text " There are one or more errors with updating. \n Check your /etc/apt/sources.list. \n         Still continue? \n        (not recommended) " --button="gtk-no:1" --button="gtk-yes:0"
+ret=$?
+[[ $ret -eq 1 ]] && exit 0
+fi
+fi
+
+SFS=$(for i in "$INSTALL"; do echo $(echo $i | sed 's| |_|g'); done)
+echo $SFS
+
+# Set variable for available and status file from the main module and for the save directory.
+if [ -f /mnt/live/tmp/modules ]; then # For porteus-boot
+NUM=$(find $(ls -d -1 /mnt/live/memory/images/*/var/lib/dpkg) \( ! -path "/mnt/live/memory/images/changes-exit/*" \)  -type f -name 'status' | wc -l)
+if [ $NUM -gt 1 ]; then
+ALL=$(find $(ls -d -1 /mnt/live/memory/images/*/var/lib/dpkg) \( ! -path "/mnt/live/memory/images/changes-exit/*" \)  -type f -name 'status')
+else
+AVAIL=$(find $(ls -d -1 /mnt/live/memory/images/*/var/lib/dpkg) \( ! -path "/mnt/live/memory/images/changes-exit/*" \)  -type f -name 'available' | head -1)
+STAT=$(find $(ls -d -1 /mnt/live/memory/images/*/var/lib/dpkg) \( ! -path "/mnt/live/memory/images/changes-exit/*" \)  -type f -name 'status' | head -1)
+fi
+CHNGS=/mnt/live/memory/changes
+
+else # For live-boot
+# First find out if we are possibly using live-boot v3
+	if grep -q /lib/live/mount /proc/mounts; then # If true we are using live-boot v3 and go on
+# Mount all loaded modules at boot in /live
+# For compatibility with other scripts using '/live/*' as mountpoint we will mount modules the same
+LOOP=$(blkid -o list -c /dev/null | grep -P "/lib/live/mount/rootfs" | awk '{print $1}')
+for i in  $LOOP; do
+cat /proc/mounts | grep ' squashfs ' | while read line; do
+LOOP=`echo ${line} | awk '{ print $1}'`
+MOD=`basename $(echo ${line} | awk '{ print $2}')`
+if [ $LOOP = $i ]; then
+mkdir /live/$MOD
+echo /live/$MOD >> /tmp/mnts # Store mountpoints in /tmp/mnts for unmounting later
+mount -o loop $LOOP /live/$MOD 2> /dev/null
+fi
+done
+done
+
+	else # For live-boot v2
+# Mount all loaded modules at boot in /live
+  if grep -qv showmounts /proc/cmdline; then
+LOOP=$(blkid -o list -c /dev/null | grep -P "squashfs" | grep "(in use)" | awk '{print $1}')
+		for i in $LOOP; do
+cat /proc/mounts | grep ' squashfs ' | while read line; do
+        LOOP=`echo ${line} | awk '{ print $1}'`
+        MOD=`basename $(echo ${line} | awk '{ print $2}')`
+    if [ $LOOP = $i ]; then
+	mkdir /live/$MOD
+	echo /live/$MOD >> /tmp/mnts # Store mountpoints in /tmp/mnts for unmounting later
+        mount -o loop $LOOP /live/$MOD 2> /dev/null
+    fi    
+done
+		done
+  fi
+fi
+
+NUM=$(find $(ls -d -1 /live/*/var/lib/dpkg) \( ! -path "/live/cow/*" \) \( ! -path "/live/image/*" \)  -type f -name 'status' | wc -l)
+if [ $NUM -gt 1 ]; then
+ALL=$(find $(ls -d -1 /live/*/var/lib/dpkg) \( ! -path "/live/cow/*" \) \( ! -path "/live/image/*" \)  -type f -name 'status')
+else
+AVAIL=$(find $(ls -d -1 /live/*/var/lib/dpkg) \( ! -path "/live/cow/*" \) \( ! -path "/live/image/*" \)  -type f -name 'available' | head -1)
+STAT=$(find $(ls -d -1 /live/*/var/lib/dpkg) \( ! -path "/live/cow/*" \) \( ! -path "/live/image/*" \)  -type f -name 'status' | head -1)
+fi
+CHNGS=/live/cow
+fi
+
+yad --on-top --title="ffmpeg2sfs" --text="  <span size='large' background='dark green' foreground='white'><b> *** Checking package(s)... *** </b></span>  " --center --undecorated --no-buttons &
+pd=$!
+
+# Do a simulation of the installing to check if everything is ok.
+export DEBIAN_FRONTEND=noninteractive
+apt-get install -s -y --force-yes $INSTALL &> /dev/null
+ret=$?
+kill $pd
+if [[ $ret -eq 100 ]]; then # If not ok
+apt-get install -s -y --force-yes $INSTALL 2>&1 | yad --width 400 --height 300 --title ffmpeg2sfs --wrap --tail --text " Sorry, there are one or more errors, see below. \n Will restore back to previous state now..." --text-info --button="gtk-close:0" &
+yad --on-top --title="ffmpeg2sfs" --text="  <span size='large' background='dark green' foreground='white'><b> *** Restoring... *** </b></span>  " --center --undecorated --no-buttons &
+pd=$!
+restore
+sleep 3
+kill $pd 2> /dev/null
+exit
+fi
+
+# Check for choice /tmp, / or drive and set new variable 'WORK' and 'SQFS'
+	if [ "$DRV" = "/tmp" ]; then
+WORK="/tmp/$SFS"
+SQFS="/tmp/$SFS".sfs
+	elif [ "$DRV" = "/" ]; then
+WORK="/$SFS"
+SQFS="/$SFS".sfs
+	else
+WORK="/mnt/$DRV/$SFS"
+SQFS="/mnt/$DRV/$SFS".sfs
+mkdir "/mnt/$DRV" 2> /dev/null
+mount /dev/$DRV /mnt/$DRV 2> /dev/null
+	fi
+
+# Check for existing directory.
+if [ -d "$WORK" ]; then
+yad --center --title="ffmpeg2sfs" --text=" Directory "$WORK" already exists, \n Please rename and run again. " --button="gtk-close:0"
+exit 0
+fi
+
+# Check if module already exists.
+if [ -f "$SQFS" ]; then
+yad --center --title="ffmpeg2sfs" --text=" Module: "$SQFS" already exists, \n Please rename and run again. " --button="gtk-close:0"
+exit 0
+fi
+
+
+# Copy status and available from one of the main (mounted) module(s), this will 'fool' dpkg.
+# This way dpkg 'knows' only about what's installed in the main module, not what's in savefile.
+if [ $NUM -gt 1 ]; then # If there are more than one status files found.
+ALL=$(echo $ALL | tr '\n' ' ')
+
+DPKGCHOICE=$(yad --separator=" " --center --height 300 --width="620" --list --title="Choose dpkg base" --text=" There are more then one dpkg registration 'status' files found in the loaded modules. \n The 'status' file lists all packages installed. \n Please choose the one you wish to use as base (starting point). \n For example in case: You have the last module in this list loaded at boot everytime. \n It's then recommended to use that. " --column " Select one of the items " $ALL --no-headers --button="gtk-cancel:1" --button="gtk-ok:0")
+ret=$?
+[[ $ret -eq 1 ]] && exit 0
+echo "$DPKGCHOICE"
+DPKGDIR=$(dirname "$DPKGCHOICE")
+AVAIL="$DPKGDIR"/available
+STAT="$DPKGDIR"/status
+yad --on-top --title="ffmpeg2sfs" --text="  <span background='dark green' foreground='yellow'><b> *** Copying 'status' and 'available' files from $DPKGDIR *** </b></span>  " --center --undecorated --no-buttons --timeout 4
+fi
+
+# Backup stuff in $CHNGS/var/lib/dpkg and $CHNGSEXIT/var/lib/dpkg (if exists) before installing to be restored later to previous state.
+[ -d "$CHNGS"/var/lib/dpkg/info ] && cp -a "$CHNGS"/var/lib/dpkg/info "$CHNGS"/var/lib/dpkg/infoold && find "$CHNGS"/var/lib/dpkg/info -name '.wh.*' -delete
+
+if [ -f /mnt/live/tmp/changes-exit ]; then
+CHNGSEXIT="/mnt/live/memory/images/changes-exit"
+[ -d "$CHNGSEXIT"/var/lib/dpkg/info ] && cp -a "$CHNGSEXIT"/var/lib/dpkg/info "$CHNGSEXIT"/var/lib/dpkg/infoold && find "$CHNGSEXIT"/var/lib/dpkg/info -name '.wh.*' -delete
+fi
+
+# Backup status and available
+cp -a /var/lib/dpkg/status /var/lib/dpkg/statusold
+cp -a /var/lib/dpkg/available /var/lib/dpkg/availableold
+
+cp -a "$AVAIL" /var/lib/dpkg/available
+cp -a "$STAT" /var/lib/dpkg/status
+
+# Download the packages.
+apt-get clean
+cmd="apt-get install -y --force-yes $INSTALL -d"
+(
+apt-get install -y --force-yes $INSTALL -d 2>&1 | tee /tmp/aptout
+ret=`echo $PIPESTATUS`
+if [ "$ret" -eq 100 ]; then
+echo $ret > /tmp/retvalue 
+fi
+echo
+echo "This window will close in a few seconds..."
+) 2>&1 | yad --title=ffmpeg2sfs --text-info --text="  <span foreground='dark green'><b>Downloading deb package(s)...</b></span> " --height=300 --width=600 --wrap --tail --button="gtk-cancel:1" &
+
+pdapt="`ps -eo pid,cmd | grep -v grep | grep "$cmd" | awk '{ print $1 }'`"
+pdyad="`ps -eo pid,cmd | grep -v grep | grep "yad --title=ffmpeg2sfs" | awk '{ print $1 }'`"
+
+while ps -p $pdapt > /dev/null
+do sleep 1
+pdyad="`ps -eo pid,cmd | grep -v grep | grep "yad --title=ffmpeg2sfs" | awk '{ print $1 }'`"
+if [ -z $pdyad ]; then
+# When interrupted show message and try to restore.
+    echo; echo 'Aarghh!! Interrupted! Will try to restore now.'
+    kill $pdapt 2> /dev/null
+sleep 3
+
+yad --on-top --title="ffmpeg2sfs" --text=" <span size='large' background='dark red' foreground='yellow'><b> *** Aarghh!!  Interrupted!</b></span><span background='dark red' foreground='white'><b>    Will try to restore now... </b></span><span size='large' background='dark red' foreground='yellow'><b> *** </b></span>  " --center --undecorated --no-buttons &
+pd=$!
+yad --on-top --geometry=160+160+160 --title="ffmpeg2sfs" --text="  <span size='large' background='dark green' foreground='white'><b> *** Restoring... *** </b></span>  " --undecorated --no-buttons &
+pdd=$! 
+restore
+sleep 2
+kill $pdd 2> /dev/null
+sleep 2
+kill $pd 2> /dev/null
+yad --on-top --title="ffmpeg2sfs" --text="  <span size='large' background='dark green' foreground='white'><b> *** Restoring Done! *** </b></span>  " --center --undecorated --no-buttons --timeout 5
+exit 0
+fi
+done
+
+sleep 3
+kill $pdyad 2> /dev/null
+
+CNT=`wc -l < /tmp/aptout`
+TEXT=`cat /tmp/aptout`
+if [ "$CNT" -lt 8 ]; then
+yad --width=600 --center --title="ffmpeg2sfs" --text=" Nothing has been installed or something unexpected occurred, apt-get output: \n \n <b>$TEXT</b> \n \n Will restore back to previous state now... " --button="gtk-close:0" &
+yad --on-top --title="ffmpeg2sfs" --text="  <span size='large' background='dark green' foreground='white'><b> *** Restoring... *** </b></span>  " --center --undecorated --no-buttons &
+pd=$!
+restore
+sleep 3
+kill $pd 2> /dev/null
+exit
+fi
+
+ERRMSG=$(cat /tmp/aptout 2> /dev/null | tail -6)
+if [ "$(cat /tmp/retvalue 2> /dev/null)" = 100 ]; then
+yad --borders 8 --width=650 --center --title="ffmpeg2sfs" --text=" An error occurred, last lines from logfile /tmp/aptout:\n \n <b>$ERRMSG</b> \n \n The module will not be created. \n \n <span foreground='dark green'><b>Will restore the system back to previous state now. </b></span> \n <span foreground='dark red'><b>If the above dpkg message contains a string like: \n No space left on device   or: \n You don't have enough free space in ... : \n That's probably because there's not enough free space in your savefile/folder. \n Or, you don't have enough RAM (when running without savefile). </b></span>  " --button="gtk-close:0" &
+
+yad --on-top --title="ffmpeg2sfs" --geometry=60+20+240 --text="  <span size='large' background='dark green' foreground='white'><b> *** Restoring... *** </b></span>  " --center --undecorated --no-buttons &
+pd=$!
+restore
+sleep 3
+kill $pd 2> /dev/null
+
+yad --on-top --title="ffmpeg2sfs" --text="  <span size='large' background='dark green' foreground='white'><b> *** Restoring Done! *** </b></span>  " --center --undecorated --no-buttons --timeout 5
+exit
+fi
+
+mkdir -p "$WORK" # Make new directory.
+wrkdir_created=yes
+
+yad --on-top --title="ffmpeg2sfs" --text="  <span size='large' background='dark green' foreground='white'><b> *** Extracting packages... *** </b></span>  " --center --undecorated --no-buttons &
+pd=$!
+cd /var/cache/apt/archives/ 
+for arg in *.deb ; do
+dpkg -x "$arg" "$WORK"
+done
+kill $pd
+
+# Execute the 'restore' function (on top of script)
+yad --on-top --title="ffmpeg2sfs" --text="  <span size='large' background='dark green' foreground='white'><b> *** Restoring... *** </b></span>  " --center --undecorated --no-buttons &
+pd=$!
+restore
+restore_done=yes
+
+kill $pd 2> /dev/null
+
+cd "$WORK"
+
+echo "Cleaning..."
+rm -fr "$WORK"/etc
+rm -fr "$WORK"/opt
+rm -fr "$WORK"/root
+rm -fr "$WORK"/var
+rm -fr "$WORK"/usr/share/doc
+rm -fr "$WORK"/usr/share/man
+rm -fr "$WORK"/usr/lib/i386-linux-gnu/i686/cmov/libavcodec.so.54.*
+rm -fr "$WORK"/usr/lib/i386-linux-gnu/i686/cmov/libavformat.so.54.*
+ln -s /usr/lib/i386-linux-gnu/libavcodec.so.54.35.0 "$WORK"/usr/lib/i386-linux-gnu/i686/cmov/libavcodec.so.54.35.0
+ln -s /usr/lib/i386-linux-gnu/libavformat.so.54.20.4 "$WORK"/usr/lib/i386-linux-gnu/i686/cmov/libavformat.so.54.20.4
+
+#cd "/mnt/$DRV"
+yad --on-top --title="ffmpeg2sfs" --text="  <span size='large' background='dark green' foreground='white'><b> *** Creating "$SQFS"... *** </b></span>  " --center --undecorated --no-buttons --timeout 4 &
+
+# Create module.
+xterm -T "ffmpeg2sfs" -si -sb -fg black -bg white -geometry 65x10 -e "mksquashfs "$WORK" "$SQFS" -comp xz -b 1M -Xbcj x86"
+
+# Remove working directory?
+yad --title="ffmpeg2sfs" --center --text=" Done creating '$SQFS' \n Do you want to remove '$WORK'? " --button="gtk-yes:0" --button="gtk-no:1"
+ret=$?
+[[ $ret -ne 0 ]] && exit 0
+if [[ -n "$SFS" && -n "$DRV" ]]; then
+rm -rf "$WORK"
+fi
+exit 0
+
+
