@@ -60,10 +60,11 @@ fi
 
 Probably any new fixes will be provided the same way.
 
-**4.** Upgrading newer xserver-xorg-video-intel package will fail to startx if you run MintPup on very pld machine with intel GPU like this one:
+**4.** Upgrading newer xserver-xorg-video-intel package will fail to startx if you run MintPup on old machine with intel GPU like this one:
 
 ```
 lspci | grep VGA
 00:01.0 VGA compatible controller: Intel Corporation 82810 DC-100 (CGC) Chipset Graphics Controller (rev 03)
 ```
 The fix is to install [xserver-xorg-video-intel_2.99.910-0ubuntu1.7_i386.deb](https://github.com/DebianDog/MintPup-Trusty/releases/download/v.1.0/xserver-xorg-video-intel_2.99.910-0ubuntu1.7_i386.deb) to restore the included in the iso driver.
+Or you can [create /etc/X11/xorg.conf](http://murga-linux.com/puppy/viewtopic.php?p=774465&sid=4bc071a9791faa4e8d9223054e8dc308#774465) driver and change intel to vesa driver with nano from command line with the newer driver.
