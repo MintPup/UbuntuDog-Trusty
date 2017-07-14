@@ -68,3 +68,9 @@ lspci | grep VGA
 ```
 The fix is to install [xserver-xorg-video-intel_2.99.910-0ubuntu1.7_i386.deb](https://github.com/DebianDog/MintPup-Trusty/releases/download/v.1.0/xserver-xorg-video-intel_2.99.910-0ubuntu1.7_i386.deb) to restore the included in the iso driver.
 Or you can [create /etc/X11/xorg.conf](http://murga-linux.com/puppy/viewtopic.php?p=774465&sid=4bc071a9791faa4e8d9223054e8dc308#774465) driver and change intel to vesa driver with nano from command line with the newer driver.
+
+**5.** Remove programs and scripts from [**mcewanw**](http://murga-linux.com/puppy/viewtopic.php?p=960161#960161)
+
+[His wish will be respected as usual.](https://github.com/MintPup/DebianDog-Wheezy/commits/master/scripts)
+
+
