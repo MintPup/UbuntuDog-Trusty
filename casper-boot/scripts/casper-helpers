@@ -190,6 +190,25 @@ try_mount ()
         return 0
     fi
 }
+ 
+#20151224 saintless for MintPup encrypted save support - the patch is copy from here: https://launchpadlibrarian.net/306017248/ubuntu-16.10-desktop-amd64-encrypt-persist.patch
+setup_crypt() {
+    # Most of the following stolen from local-top/cryptroot
+    cryptcreate="cryptsetup luksOpen $1 $2"
+    cryptkey="Unlocking the disk $cryptsource ($crypttarget)\nEnter passphrase: "
+    if [ -x /bin/plymouth ] && plymouth --ping; then
+	cryptkeyscript="plymouth ask-for-password --prompt"
+	cryptkey=$(printf "$cryptkey")
+    else
+	cryptkeyscript="/lib/cryptsetup/askpass"
+    fi
+
+    $cryptkeyscript "$cryptkey" | $cryptcreate --key-file=- &&
+    /sbin/udevadm settle
+    if [ -e "/dev/mapper/$2" ]; then
+	echo "/dev/mapper/$2"
+    fi
+}
 
 find_cow_device() {
     pers_label="${1}"
@@ -216,15 +235,22 @@ find_cow_device() {
             # mount a journalled filesystem and replay the journal. Doing so
             # will cause data loss when a live CD is booted on a system
             # where filesystems are in use by hibernated operating systems.
-            elif [ "$(get_fstype ${devname})" = "vfat" ]; then
+ #20151224 saintless for MintPup allow save file on ntfs and ext3,4 even if it is not recommended reading the above warning about journalled filesystem.
+            elif [ "$(get_fstype ${devname})" = "vfat" ] ||  [ "$(get_fstype ${devname})" = "ext2" ] ||  [ "$(get_fstype ${devname})" = "ext3" ] ||  [ "$(get_fstype ${devname})" = "ext4" ] ||  [ "$(get_fstype ${devname})" = "ntfs" ]; then 
                 mkdir -p "${cow_backing}"
+ #20151224 saintless for MintPup encrypted save support - the patch is copy from here: https://launchpadlibrarian.net/306017248/ubuntu-16.10-desktop-amd64-encrypt-persist.patch                
                 try_mount "${devname}" "${cow_backing}" "rw" || continue
                 cow_backing_mp=$(where_is_mounted "${devname}")
                 if [ -e "${cow_backing_mp}/${pers_fpath}" ]; then
+                    # check to see if its a luks devices, this is probably better than get_fstype
+                    if cryptsetup isLuks "${cow_backing_mp}/${pers_fpath}"; then
+			echo $(setup_crypt "${cow_backing_mp}/${pers_fpath}" ${pers_label})
+			return 0
+                    fi                   
                     echo $(setup_loop "${cow_backing_mp}/${pers_fpath}" "loop" "/sys/block/loop*")
                     return 0
                 else
-                    umount ${cow_backing_mp}
+                    umount ${cow_backing_mp} 2> /dev/null
                 fi
             fi
         done
