@@ -178,16 +178,24 @@ copy_live_to() {
             return 1
         fi
     fi
-    if [ "${freespace}" -lt "${size}" ] ; then
-        [ "$quiet" != "y" ] && log_warning_msg "Not enough free ${free_string} (${freespace}k > ${size}k) to copy live media in ${copytodev}."
-        return 1
-    fi
+
+#20170811 saintless for MintPup - comment out the free space check - toram now will copy only /casper instead whole medium in RAM.
+###    if [ "${freespace}" -lt "${size}" ] ; then
+###        [ "$quiet" != "y" ] && log_warning_msg "Not enough free ${free_string} (${freespace}k > ${size}k) to copy live media in ${copytodev}."
+###        return 1
+###    fi
 
     # begin copying..
     mkdir "${copyto}"
     echo "mount -t ${fstype} ${mount_options} ${dev} ${copyto}"
     mount -t "${fstype}" ${mount_options} "${dev}" "${copyto}"
-    cp -a ${copyfrom}/* ${copyto}
+
+#20170811 saintless for MintPup - change cp with rsync as in live-boot (include rsync and /lib/i386-linux-gnu/libz.so.1 in initrd.lz).
+#         toram will copy only /casper (not whole medium) in RAM. Save sessions on CD/DVD works now :) toram for HDD/USB frugal install also works now. 
+    echo " * Copying whole medium to RAM" 1>/dev/console
+    mkdir -p ${copyto}/${LIVE_MEDIA_PATH} # 20170811 saintless - using toram copy only /casper and its content (useful for hdd or usb frugal install).
+    rsync -a --progress ${copyfrom}/${LIVE_MEDIA_PATH}/* ${copyto}/${LIVE_MEDIA_PATH} 1>/dev/console  # "cp -a" from busybox also copies hidden files	# 20170809 saintless - using toram copy only /live and its content (useful for hdd or usb frugal install).		
+
     if [ -e ${copyfrom}/.disk ]; then
         cp -a ${copyfrom}/.disk ${copyto}
     fi
@@ -408,7 +416,7 @@ setup_unionfs() {
     rofsstring=""
     rofslist=""
     if [ "${UNIONFS}" = "aufs" ]; then
-        roopt="rr"
+        roopt="rr+wh" #20170811 saintless for MintPup - as in DebianDog same suggestion from fredx181 for .wh support loading squashfs modules.
     elif [ "${UNIONFS}" = "unionfs-fuse" ]; then
         roopt="RO"
     else
