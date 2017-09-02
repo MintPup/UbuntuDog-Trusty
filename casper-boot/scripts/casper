@@ -157,7 +157,7 @@ copy_live_to() {
     copytodev="${2}"
     copyto="${copyfrom}_swap"
 
-    size=$(fs_size "" ${copyfrom} "used")
+    size=$(fs_size "" ${copyfrom}/${LIVE_MEDIA_PATH} "used") #20170901 saintless: correct ramdrive size after the change to copy only /casper folder to RAM.
 
     if [ "${copytodev}" = "ram" ]; then
         # copying to ram:
@@ -179,11 +179,10 @@ copy_live_to() {
         fi
     fi
 
-#20170811 saintless for MintPup - comment out the free space check - toram now will copy only /casper instead whole medium in RAM.
-###    if [ "${freespace}" -lt "${size}" ] ; then
-###        [ "$quiet" != "y" ] && log_warning_msg "Not enough free ${free_string} (${freespace}k > ${size}k) to copy live media in ${copytodev}."
-###        return 1
-###    fi
+    if [ "${freespace}" -lt "${size}" ] ; then
+        [ "$quiet" != "y" ] && log_warning_msg "Not enough free ${free_string} (${freespace}k > ${size}k) to copy live media in ${copytodev}."
+        return 1
+    fi
 
     # begin copying..
     mkdir "${copyto}"
